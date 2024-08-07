@@ -1,8 +1,8 @@
 require_relative 'dictionnary'
 require_relative 'player'
 require_relative 'clear_screen'
+require 'yaml'
 require 'colorize'
-
 # Game class contains the game logic
 class Game
   include ClearScreen
@@ -15,19 +15,22 @@ class Game
   STICKMAN_RIGHT_LEG = '\\'.freeze
   ALPHABETS = ('a'..'z').to_a.freeze
   def initialize(dictionnary_file = 'google-10000-english-no-swears.txt')
-    @dictionnary = Dictionnary.new(dictionnary_file)
+    Dictionnary.load_dict(dictionnary_file)
     @player = Player.new
-    @word = nil
+    @word = Dictionnary.random_word.chars
     @letters_played = []
-    @letters = ('a'..'z').to_a
     @mistakes = 0
   end
 
+  def save_game
+    File.write('save.yaml', YAML.dump(self))
+  end
+
   def start
-    @word = @dictionnary.random_word.chars
     loop do
-      print_hang
-      print_alphabets
+      print_game
+      prompt_save_game unless @letters_played.empty? && @mistakes == 6
+      print_game
       if check_win
         puts 'You WON!'
         return
@@ -38,12 +41,20 @@ class Game
       letter_played = nil
       loop do
         letter_played = @player.play
-        break unless @letters.delete(letter_played).nil?
+        break unless @letters_played.include? letter_played
 
         puts 'Letter already choosed...'
       end
       @letters_played.push(letter_played)
       check_mistake(letter_played)
+    end
+  end
+
+  def prompt_save_game
+    puts 'Want to save current game? Y for yes'
+    case gets.chomp.downcase
+    when 'y'
+      save_game
     end
   end
 
@@ -57,8 +68,13 @@ class Game
     (@word.uniq & @letters_played).eql?(@word.uniq)
   end
 
-  def print_hang
+  def print_game
     clear_screen
+    print_hang
+    print_alphabets
+  end
+
+  def print_hang # rubocop:disable Metrics/CyclomaticComplexity
     puts "  ________        #{print_letters}"
     puts ' |        |'
     puts " |        #{@mistakes.positive? ? STICKMAN_HEAD : ''}"
@@ -74,7 +90,12 @@ class Game
 
   def print_alphabets
     ALPHABETS.each do |letter|
-      print("#{@letters.include?(letter) ? letter.upcase : letter.upcase.colorize(color: :grey, mode: :strike)} ")
+      print("#{if @letters_played.include?(letter)
+                 letter.upcase.colorize(color: :grey,
+                                        mode: :strike)
+               else
+                 letter.upcase
+               end} ")
     end
     puts
   end
